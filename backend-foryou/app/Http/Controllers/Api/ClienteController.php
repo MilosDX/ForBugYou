@@ -1,0 +1,228 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Cliente;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+class ClienteController extends Controller
+{
+    /**
+     * @OA\Get(
+     *     path="/api/clientes",
+     *     operationId="getClientes",
+     *     tags={"Clientes"},
+     *     summary="Get list of clientes",
+     *     description="Returns list of clientes",
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful operation",
+     *         @OA\JsonContent(
+     *             type="array",
+     *             @OA\Items(ref="#/components/schemas/Cliente")
+     *         )
+     *     )
+     * )
+     */
+    public function index()
+    {
+        return response()->json(Cliente::all());
+    }
+
+    /**
+     * @OA\Post(
+     *     path="/api/clientes",
+     *     operationId="createCliente",
+     *     tags={"Clientes"},
+     *     summary="Create a new cliente",
+     *     description="Creates a new cliente",
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(ref="#/components/schemas/ClienteInput")
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Cliente created successfully",
+     *         @OA\JsonContent(ref="#/components/schemas/Cliente")
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error"
+     *     )
+     * )
+     */
+    public function store(Request $request)
+    {
+        try {
+            $validatedData = $request->validate([
+                'nombre' => 'required|string|max:255',
+                'usuario' => 'nullable|string|max:255|unique:clientes,usuario',
+                'password' => 'required|string|min:8', // 'password' as input, will be hashed to 'password_hash'
+                'telefono' => 'nullable|string|max:50',
+                'domicilio' => 'nullable|string|max:255',
+                'correo' => 'nullable|string|email|max:255|unique:clientes,correo',
+                'auth_user_id' => 'nullable|uuid',
+            ]);
+
+            // Hash the password
+            $validatedData['password_hash'] = Hash::make($validatedData['password']);
+            unset($validatedData['password']); // Remove plain password from data
+
+            $cliente = Cliente::create($validatedData);
+            return response()->json($cliente, 201); // 201 Created
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation Failed',
+                'errors' => $e->errors()
+            ], 422); // 422 Unprocessable Entity
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error creating cliente',
+                'error' => $e->getMessage()
+            ], 500); // 500 Internal Server Error
+        }
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/clientes/{id}",
+     *     operationId="getClienteById",
+     *     tags={"Clientes"},
+     *     summary="Get cliente by ID",
+     *     description="Returns a single cliente",
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="ID of cliente to return",
+     *         required=true,
+     *         @OA\Schema(
+     *             type="string"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Successful operation",
+     *         @OA\JsonContent(ref="#/components/schemas/Cliente")
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Cliente not found"
+     *     )
+     * )
+     */
+    public function show(Cliente $cliente)
+    {
+        return response()->json($cliente);
+    }
+
+    /**
+     * @OA\Put(
+     *     path="/api/clientes/{id}",
+     *     operationId="updateCliente",
+     *     tags={"Clientes"},
+     *     summary="Update an existing cliente",
+     *     description="Updates a cliente",
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="ID of cliente to update",
+     *         required=true,
+     *         @OA\Schema(
+     *             type="string"
+     *         )
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(ref="#/components/schemas/ClienteInput")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Cliente updated successfully",
+     *         @OA\JsonContent(ref="#/components/schemas/Cliente")
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Cliente not found"
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Validation error"
+     *     )
+     * )
+     */
+    public function update(Request $request, Cliente $cliente)
+    {
+        try {
+            $validatedData = $request->validate([
+                'nombre' => 'sometimes|required|string|max:255',
+                'usuario' => 'sometimes|nullable|string|max:255|unique:clientes,usuario,'.$cliente->id_cliente.',id_cliente',
+                'password' => 'sometimes|required|string|min:8',
+                'telefono' => 'sometimes|nullable|string|max:50',
+                'domicilio' => 'sometimes|nullable|string|max:255',
+                'correo' => 'sometimes|nullable|string|email|max:255|unique:clientes,correo,'.$cliente->id_cliente.',id_cliente',
+                'auth_user_id' => 'sometimes|nullable|uuid',
+            ]);
+
+            if (isset($validatedData['password'])) {
+                $validatedData['password_hash'] = Hash::make($validatedData['password']);
+                unset($validatedData['password']);
+            }
+
+            $cliente->update($validatedData);
+            return response()->json($cliente);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation Failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error updating cliente',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * @OA\Delete(
+     *     path="/api/clientes/{id}",
+     *     operationId="deleteCliente",
+     *     tags={"Clientes"},
+     *     summary="Delete a cliente",
+     *     description="Deletes a single cliente",
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="ID of cliente to delete",
+     *         required=true,
+     *         @OA\Schema(
+     *             type="string"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=204,
+     *         description="No content"
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Cliente not found"
+     *     )
+     * )
+     */
+    public function destroy(Cliente $cliente)
+    {
+        try {
+            $cliente->delete();
+            return response()->json(null, 204); // 204 No Content
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error deleting cliente',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
